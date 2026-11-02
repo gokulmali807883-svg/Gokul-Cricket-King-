@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="mr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Gokul Cricket King</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    body {
+      background-color: #06110a;
+      color: #ffffff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      touch-action: none;
+      overflow-x: hidden;
+    }
+    header {
+      width: 100%;
+      max-width: 480px;
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #0d2315;
+      border-bottom: 2px solid #22c55e;
+    }
+    h1 {
+      font-size: 20px;
+      color: #4ade80;
+    }
+    .score-board {
+      display: flex;
+      gap: 12px;
+      font-size: 15px;
+      font-weight: bold;
+    }
+    .score-board span {
+      color: #facc15;
+    }
+    .viewport {
+      width: 100%;
+      max-width: 480px;
+      height: 280px;
+      background: #14532d;
+      position: relative;
+      border-bottom: 3px solid #16a34a;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .main-controls {
+      width: 100%;
+      max-width: 480px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .btn-start {
+      background: #16a34a;
+      color: #ffffff;
+      padding: 20px;
+      font-size: 22px;
+      font-weight: bold;
+      border: 3px solid #4ade80;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+    .btn-start:active {
+      transform: scale(0.98);
+    }
+    .btn-bowl {
+      background: #0284c7;
+      color: #ffffff;
+      padding: 18px;
+      font-size: 20px;
+      font-weight: bold;
+      border: 2px solid #38bdf8;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+    .shots-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      width: 100%;
+    }
+    .btn-shot {
+      padding: 20px 6px;
+      font-size: 16px;
+      font-weight: bold;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 12px;
+      color: #ffffff;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .btn-shot:active {
+      filter: brightness(0.8);
+      transform: scale(0.96);
+    }
+    .btn-left { background: #b91c1c; border-color: #f87171; }
+    .btn-straight { background: #d97706; border-color: #fde047; }
+    .btn-right { background: #2563eb; border-color: #60a5fa; }
+    .instructions {
+      font-size: 14px;
+      color: #cbd5e1;
+      text-align: center;
+      padding: 6px;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      border: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>🏏 Gokul Cricket King</h1>
+    <div class="score-board">
+      <div>धावा: <span id="runsTxt">0</span>/<span id="wicketsTxt">0</span></div>
+      <div>बॉल: <span id="ballsTxt">0</span>/6</div>
+    </div>
+  </header>
+
+  <div class="viewport" id="touchArea" aria-hidden="true">
+    <canvas id="cricketCanvas" width="480" height="280"></canvas>
+  </div>
+
+  <div class="instructions" aria-hidden="true">
+    स्क्रीनवर स्वाइप करा: ⬆️ समोर | ⬅️ डावीकडे | ➡️ उजवीकडे
+  </div>
+
+  <main class="main-controls">
+    <button class="btn-start" id="startBtn" onclick="initGame()" aria-label="गेम आणि आवाज सुरू करा">
+      ▶️ गेम आणि आवाज सुरू करा
+    </button>
+
+    <button class="btn-bowl" id="bowlBtn" onclick="deliverBall()" style="display:none;" aria-label="पुढचा बॉल टाका">
+      ⚾ बॉल टाका (Next Ball)
+    </button>
+
+    <div class="shots-grid" role="group" aria-label="शॉट कंट्रोल्स">
+      <button class="btn-shot btn-left" onclick="triggerShot('left')" aria-label="डावीकडे लेग शॉट">
+        ⬅️ डावीकडे<br><span>(Pull)</span>
+      </button>
+      <button class="btn-shot btn-straight" onclick="triggerShot('straight')" aria-label="समोर स्ट्रेट शॉट">
+        ⬆️ समोर<br><span>(Straight)</span>
+      </button>
+      <button class="btn-shot btn-right" onclick="triggerShot('right')" aria-label="उजवीकडे ऑफ शॉट">
+        ➡️ उजवीकडे<br><span>(Cover)</span>
+      </button>
+    </div>
+  </main>
+
+  <div id="srAnnounce" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
+
+  <script>
+    let runs = 0;
+    let wickets = 0;
+    let balls = 0;
+    let isLive = false;
+    let isBallActive = false;
+    let ballDir = 'straight';
+    let ballState = 'ready'; // ready, bowling, pitched, played, dead
+    let ballX = 240;
+    let ballY = 70;
+    let ballRadius = 6;
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    let audioCtx = null;
+
+    function announce(text) {
+      document.getElementById('srAnnounce').innerText = text;
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = 'mr-IN';
+        utter.rate = 1.05;
+        window.speechSynthesis.speak(utter);
+      }
+    }
+
+    function initGame() {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioContext();
+      isLive = true;
+      document.getElementById('startBtn').style.display = 'none';
+      document.getElementById('bowlBtn').style.display = 'block';
+      announce("गोकुळ क्रिकेट किंग सुरू झाला आहे. बॉल टाका बटण दाबा.");
+      setupTouchGestures();
+      requestAnimationFrame(gameLoop);
+    }
+
+    function deliverBall() {
+      if (!isLive || isBallActive || balls >= 6) {
+        if (balls >= 6) announce("ओव्हर संपली आहे. एकूण धावा " + runs);
+        return;
+      }
+
+      isBallActive = true;
+      ballState = 'bowling';
+      ballX = 240;
+      ballY = 70;
+      ballRadius = 6;
+
+      const directions = ['left', 'straight', 'right'];
+      ballDir = directions[Math.floor(Math.random() * directions.length)];
+
+      playFootstepSound();
+
+      setTimeout(() => {
+        if (ballDir === 'left') announce("डाव्या बाजूने लेग स्टंपवर बॉल");
+        else if (ballDir === 'right') announce("उजव्या बाजूने ऑफ स्टंपवर बॉल");
+        else announce("सरळ स्टंपवर बॉल");
+      }, 350);
+
+      setTimeout(() => {
+        if (isBallActive && ballState === 'bowling') {
+          ballState = 'pitched';
+          playPitchSound();
+        }
+      }, 1400);
+
+      setTimeout(() => {
+        if (isBallActive && ballState === 'pitched') {
+          ballState = 'dead';
+          isBallActive = false;
+          wickets++;
+          balls++;
+          updateHUD();
+          playBowledSound();
+          announce("बाद! क्लीन बोल्ड!");
+          checkGameOver();
+        }
+      }, 2100);
+    }
+
+    function triggerShot(dir) {
+      if (!isBallActive || ballState === 'dead') return;
+
+      if (ballState === 'bowling') {
+        announce("खूप लवकर बॅट फिरवली! बॉल हुकला.");
+        return;
+      }
+
+      if (ballState === 'pitched') {
+        isBallActive = false;
+        ballState = 'played';
+        balls++;
+
+        if (dir === ballDir) {
+          playBatSound();
+          const shotScore = Math.random() > 0.4 ? 6 : 4;
+          runs += shotScore;
+          updateHUD();
+          playCheerSound();
+          if (shotScore === 6) announce("खणखणीत षटकार! बॉल सीमारेषेबाहेर!");
+          else announce("चौकार! जबरदस्त शॉट!");
+        } else {
+          playBatSound();
+          const shotScore = Math.random() > 0.5 ? 2 : 1;
+          runs += shotScore;
+          updateHUD();
+          announce(shotScore + " धाव घेतली.");
+        }
+        checkGameOver();
+      }
+    }
+
+    function checkGameOver() {
+      if (balls >= 6 || wickets >= 3) {
+        setTimeout(() => {
+          announce("सामना संपला. एकूण धावा " + runs + " बाद " + wickets);
+          document.getElementById('bowlBtn').innerText = "🔄 पुन्हा सुरू करा";
+          document.getElementById('bowlBtn').onclick = resetMatch;
+        }, 2200);
+      }
+    }
+
+    function resetMatch() {
+      runs = 0;
+      wickets = 0;
+      balls = 0;
+      updateHUD();
+      document.getElementById('bowlBtn').innerText = "⚾ बॉल टाका (Next Ball)";
+      document.getElementById('bowlBtn').onclick = deliverBall;
+      announce("नवीन ओव्हर सुरू झाली आहे. बॉल टाका.");
+    }
+
+    function updateHUD() {
+      document.getElementById('runsTxt').innerText = runs;
+      document.getElementById('wicketsTxt').innerText = wickets;
+      document.getElementById('ballsTxt').innerText = balls;
+    }
+
+    function playPitchSound() {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(140, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.7, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.15);
+    }
+
+    function playBatSound() {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(120, audioCtx.currentTime + 0.16);
+      gain.gain.setValueAtTime(0.9, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.16);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.18);
+    }
+
+    function playBowledSound() {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.35);
+      gain.gain.setValueAtTime(0.8, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.4);
+    }
+
+    function playCheerSound() {
+      if (!audioCtx) return;
+      for (let i = 0; i < 3; i++) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400 + (i * 150), audioCtx.currentTime);
+        osc.frequency.linearRampToValueAtTime(700 + (i * 150), audioCtx.currentTime + 0.5);
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.85);
+      }
+    }
+
+    function playFootstepSound() {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(80, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.12);
+    }
+
+    function setupTouchGestures() {
+      const area = document.body;
+      area.addEventListener('touchstart', (e) => {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+      }, { passive: true });
+
+      area.addEventListener('touchend', (e) => {
+        const deltaX = e.changedTouches[0].clientX - touchStartX;
+        const deltaY = e.changedTouches[0].clientY - touchStartY;
+
+        if (Math.abs(deltaX) < 25 && Math.abs(deltaY) < 25) return;
+
+        if (Math.abs(deltaY) > Math.abs(deltaX) && deltaY < -30) {
+          triggerShot('straight');
+        } else if (deltaX < -30) {
+          triggerShot('left');
+        } else if (deltaX > 30) {
+          triggerShot('right');
+        }
+      }, { passive: true });
+    }
+
+    const canvas = document.getElementById('cricketCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // मैदान
+      ctx.fillStyle = '#15803d';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // खेळपट्टी (Pitch)
+      ctx.fillStyle = '#ca8a04';
+      ctx.beginPath();
+      ctx.moveTo(195, 60);
+      ctx.lineTo(285, 60);
+      ctx.lineTo(345, 270);
+      ctx.lineTo(135, 270);
+      ctx.closePath();
+      ctx.fill();
+
+      // क्रीज लाईन्स
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(200, 75);
+      ctx.lineTo(280, 75);
+      ctx.moveTo(145, 240);
+      ctx.lineTo(335, 240);
+      ctx.stroke();
+
+      // बॅट्समन स्टम्प्स
+      ctx.fillStyle = '#fef08a';
+      ctx.fillRect(232, 230, 4, 24);
+      ctx.fillRect(238, 230, 4, 24);
+      ctx.fillRect(244, 230, 4, 24);
+      ctx.fillRect(230, 228, 20, 3); // गिल्ल्या
+
+      // बॅट्समन
+      ctx.fillStyle = '#1e3a8a';
+      ctx.fillRect(210, 215, 16, 32);
+      ctx.fillStyle = '#fde047';
+      ctx.beginPath();
+      ctx.arc(218, 210, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // लाकडी बॅट
+      ctx.fillStyle = '#b45309';
+      ctx.fillRect(222, 225, 6, 26);
+
+      // बॉल ॲनिमेशन
+      if (isBallActive && (ballState === 'bowling' || ballState === 'pitched')) {
+        ballY += 2.2;
+        ballRadius += 0.08;
+
+        if (ballDir === 'left') ballX -= 0.65;
+        else if (ballDir === 'right') ballX += 0.65;
+
+        ctx.fillStyle = '#dc2626';
+        ctx.beginPath();
+        ctx.arc(ballX, ballY, ballRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(ballX, ballY, ballRadius, -0.4, 0.4);
+        ctx.stroke();
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+  </script>
+</body>
+</html>
+
